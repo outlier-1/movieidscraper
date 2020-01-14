@@ -1,2 +1,5 @@
 venv/
 .idea/
+token.pickle
+spreadsheet_id.txt
+

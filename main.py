@@ -1,11 +1,15 @@
+import argparse
+import os
 from bs4 import BeautifulSoup
 from datetime import datetime
+from googleapi_connection import GoogleAPI
 import requests
 import codecs
 import time
 
 STREAM_SOURCE_URL = 'https://hdss.to/'
 MOVIE_DB_SOURCE_URL = 'https://www.themoviedb.org'
+
 
 _feed_urls = set()
 
@@ -24,13 +28,28 @@ def _get_feed_urls():
     return urls
 
 
-def get_live_feed():
+def _construct_movie_query(name, type):
+    clean_name = ''
+    for ch in name:
+        if ch.isalnum():
+            clean_name += ch
+        else:
+            clean_name += '%'
+            hex_val = codecs.encode(ch.encode(), "hex")
+            clean_name += hex_val.decode().upper()
+    query = "{src}/search/{type}?query={name}&language=en-US".format(src=MOVIE_DB_SOURCE_URL,
+                                                                     type=type,
+                                                                     name=clean_name)
+    return query
+
+
+def _get_live_feed():
     """
     Gets details of live feed.
     Due to performance reasons, it first checks the status of live feed,
     if it's not changed, doesn't do any http get calls to individual movies
 
-    :return: Only New Data, List of List with columns [Name, Description, Date]
+    :return: Only New Data, List of List with columns [Type, Name, Description, Date]
     """
     global _feed_urls
 
@@ -70,31 +89,22 @@ def get_live_feed():
         else:
             date = list(info_tag.li.strings)[1]
 
-        data.append([title_tag.string, " ".join(desc_parts), date, type])
+        data.append([type, title_tag.string, " ".join(desc_parts), date])
 
-    _live_feed_urls = updated_urls
+    _feed_urls = updated_urls
     return data
 
 
-def _construct_movie_query(name, type):
-    clean_name = ''
-    for ch in name:
-        if ch.isalnum():
-            clean_name += ch
-        else:
-            clean_name += '%'
-            hex_val = codecs.encode(ch.encode(), "hex")
-            clean_name += hex_val.decode().upper()
-    query = "{src}/search/{type}?query={name}&language=en-US".format(src=MOVIE_DB_SOURCE_URL,
-                                                                      type=type,
-                                                                      name=clean_name)
-    return query
-
-
-def search_in_movie_db(query, date):
-    """ Get all result list, check with dates """
+def _search_in_movie_db(query, date):
+    """
+    Searches a movie or series in movie database based on query and release date
+    :param query: Query in format of link
+    :param date: Release date of given movie or series
+    :return: The movie database link if it founds, otherwise None
+    """
     request = requests.get(query)
     soup = BeautifulSoup(request.content, features="html.parser")
+
     for a in soup.find_all('a', class_='title result'):
         date_str = a.find_next_sibling('span').string
         try:
@@ -103,24 +113,49 @@ def search_in_movie_db(query, date):
             pass
         if result_dt == date:
             result_link = a['href']
-            return result_link.split('?')[0].split('/')[2]  # Extracts Key
+            return result_link.split('?')[0].split('/')[2]  # Extracts Key from URL
     return None
 
 
-def sent_to_database(key, data):
-    with open('new.txt', 'a+') as f:
-        f.write("{}\t{}\t{}\n".format(data[0], data[1], key))
+def _sent_to_database(data):
+    api = GoogleAPI()
+    api.authenticate('credentials.json')
+    if os.path.exists('spreadsheet_id.txt'):
+        with open("spreadsheet_id.txt", 'r') as f:
+            api.spreadsheetID = f.readline()
+        api.append_spreadsheet(api.spreadsheetID, 'A1:D1', data)
+    else:
+        new_id = api.create_spreadsheet('Movie Data')
+        print(new_id)
+        with open('spreadsheet_id.txt', 'w+') as f:
+            f.write(new_id)
+        api.append_spreadsheet(new_id, 'A1:D1', data)
+    del api
 
 
 def scrape():
-    new_data = get_live_feed()
+    start_time = time.time()
+    new_data = _get_live_feed()
     if new_data:
         for data in new_data:
-            query = _construct_movie_query(name=data[0], type=data[3])
-            date = datetime.strptime(data[2], "%d-%m-%Y")
-            key = search_in_movie_db(query, date)
-            sent_to_database(key, data)
-    time.sleep(600)
-    scrape()
+            query = _construct_movie_query(type=data[0], name=data[1])
+            date = datetime.strptime(data[3], "%d-%m-%Y")
+            key = _search_in_movie_db(query, date)
+            data.append(key)
+        _sent_to_database(new_data)
+    print("---Scraping is done in {:.2f} seconds ---".format(time.time() - start_time))
 
-scrape()
+
+def main():
+    parser = argparse.ArgumentParser(description='Help Screen for Command Line Arguments')
+    parser.add_argument("--sec", default=600, type=int, help="Sleep time in seconds for scraper")
+
+    args = parser.parse_args()
+
+    scrape()
+    time.sleep(args.sec)
+    main()
+
+
+if __name__ == '__main__':
+    main()
