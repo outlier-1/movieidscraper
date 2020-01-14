@@ -1,8 +1,13 @@
 # Movie Id Scraper
-Program that scrapes new series or movie's from hdss.to, and matches their corresponding id in themoviedb.org
-I am doing some pro bono work in upwork.com
 
-# Job Posting: https://www.upwork.com/jobs/~01820e85810cfbdc3e
+I am doing pro bono work in upwork.com for my portfolio, that is one of the projects i chose to do.
+
+This is a program that scrapes the live feed of hdss.to, and matches their corresponding id's in themoviedb.org
+and finally saves them your google spreadsheet.
+
+
+# Job Posting 
+https://www.upwork.com/jobs/~01820e85810cfbdc3e
 
 Job Posting Says:
 I need a bot-automation to scrap data from a website (titles, descriptions etc )https://hdss.to/ and scrap the 
