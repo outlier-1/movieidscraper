@@ -1,5 +1,6 @@
 venv/
-.idea/
+*.
+__pycache__/
 token.pickle
 spreadsheet_id.txt
 
